@@ -957,7 +957,7 @@ write_waypoints(std::vector<mavlink_mission_item_t> waypoints) {
     for(int i = 0; i < waypoints.size(); i++){
         waypoints[i].target_system = system_id;
         waypoints[i].target_component = autopilot_id;
-        waypoints[i].frame = MAV_FRAME_GLOBAL;
+        waypoints[i].frame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
         waypoints[i].autocontinue = true;
         waypoints[i].current = 1;
         mavlink_message_t message;
