@@ -4,8 +4,6 @@
  *   Author: Trent Lukaczyk, <aerialhedgehog@gmail.com>
  *           Jaycee Lock,    <jaycee.lock@gmail.com>
  *           Lorenz Meier,   <lm@inf.ethz.ch>
- *	     Tristan Sherman, <tristan.m.sherman@gmail.com>
- *	     Mitchell Caudle, Jimmy Lopez, Hana Haideri
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,11 +35,11 @@
  ****************************************************************************/
 
 /**
- * @file autopilot_interface.h
+ * @file mavlink_control.cpp
  *
- * @brief Autopilot interface definition
+ * @brief An example offboard control process via mavlink
  *
- * Functions for sending and recieving commands to an autopilot via MAVlink
+ * This process connects an external MAVLink UART device to send an receive data
  *
  * @author Trent Lukaczyk, <aerialhedgehog@gmail.com>
  * @author Jaycee Lock,    <jaycee.lock@gmail.com>
@@ -50,489 +48,273 @@
  */
 
 
-#ifndef AUTOPILOT_INTERFACE_H_
-#define AUTOPILOT_INTERFACE_H_
 
 // ------------------------------------------------------------------------------
 //   Includes
 // ------------------------------------------------------------------------------
 
-#include "serial_port.h"
-
-#include <signal.h>
-#include <time.h>
-#include <sys/time.h>
-#include <vector>
-
-#include "Mavlink/common/mavlink.h"
-
-// ------------------------------------------------------------------------------
-//   Defines
-// ------------------------------------------------------------------------------
-
-/**
- * Defines for mavlink_set_position_target_local_ned_t.type_mask
- *
- * Bitmask to indicate which dimensions should be ignored by the vehicle
- *
- * a value of 0b0000000000000000 or 0b0000001000000000 indicates that none of
- * the setpoint dimensions should be ignored.
- *
- * If bit 10 is set the floats afx afy afz should be interpreted as force
- * instead of acceleration.
- *
- * Mapping:
- * bit 1: x,
- * bit 2: y,
- * bit 3: z,
- * bit 4: vx,
- * bit 5: vy,
- * bit 6: vz,
- * bit 7: ax,
- * bit 8: ay,
- * bit 9: az,
- * bit 10: is force setpoint,
- * bit 11: yaw,
- * bit 12: yaw rate
- * remaining bits unused
- *
- * Combine bitmasks with bitwise &
- *
- * Example for position and yaw angle:
- * uint16_t type_mask =
- *     MAVLINK_MSG_SET_POSITION_TARGET_LOCAL_NED_POSITION &
- *     MAVLINK_MSG_SET_POSITION_TARGET_LOCAL_NED_YAW_ANGLE;
- */
-
-                                                // bit number  876543210987654321
-#define MAVLINK_MSG_SET_POSITION_TARGET_LOCAL_NED_POSITION     0b0000110111111000
-#define MAVLINK_MSG_SET_POSITION_TARGET_LOCAL_NED_VELOCITY     0b0000110111000111
-#define MAVLINK_MSG_SET_POSITION_TARGET_LOCAL_NED_ACCELERATION 0b0000110000111111
-#define MAVLINK_MSG_SET_POSITION_TARGET_LOCAL_NED_FORCE        0b0000111000111111
-#define MAVLINK_MSG_SET_POSITION_TARGET_LOCAL_NED_YAW_ANGLE    0b0000100111111111
-#define MAVLINK_MSG_SET_POSITION_TARGET_LOCAL_NED_YAW_RATE     0b0000010111111111
-
-
-
-#define PI 3.14159265359
-#define TO_RADIANS PI / 180;
-#define RADIUS_EARTH	6378037.0
-
+#include "CA.h"
+#include <fstream>
 
 
 // ------------------------------------------------------------------------------
-//   Prototypes
+//   TOP
 // ------------------------------------------------------------------------------
-
-
-// helper functions
-uint64_t get_time_usec();
-void set_position(float x, float y, float z, mavlink_set_position_target_local_ned_t &sp);
-void set_velocity(float vx, float vy, float vz, mavlink_set_position_target_local_ned_t &sp);
-void set_acceleration(float ax, float ay, float az, mavlink_set_position_target_local_ned_t &sp);
-void set_yaw(float yaw, mavlink_set_position_target_local_ned_t &sp);
-void set_yaw_rate(float yaw_rate, mavlink_set_position_target_local_ned_t &sp);
-
-void* start_autopilot_interface_read_thread(void *args);
-void* start_autopilot_interface_write_thread(void *args);
-void* start_collision_avoidance_thread(void *args); //Runs 2nd after start_collision_avoidance()
-
-// ------------------------------------------------------------------------------
-//   Data Structures
-// ------------------------------------------------------------------------------
-
-struct Time_Stamps
+int
+top (int argc, char **argv)
 {
-	Time_Stamps()
-	{
-		reset_timestamps();
-	}
 
-	uint64_t heartbeat;
-	uint64_t sys_status;
-	uint64_t battery_status;
-	uint64_t radio_status;
-	uint64_t local_position_ned;
-	uint64_t global_position_int;
-	uint64_t position_target_local_ned;
-	uint64_t position_target_global_int;
-	uint64_t highres_imu;
-	uint64_t attitude;
-	uint64_t adsb_vehicle_t;
-	uint64_t mavlink_mission_count;
-	uint64_t mavlink_mission_item;
-	uint64_t mission_current_t;
-	uint64_t rc_channels_raw_t;
+	sleep(180);
+	// --------------------------------------------------------------------------
+	//   PARSE THE COMMANDS
+	// --------------------------------------------------------------------------
 
-	void
-	reset_timestamps()
-	{
-		heartbeat = 0;
-		sys_status = 0;
-		battery_status = 0;
-		radio_status = 0;
-		local_position_ned = 0;
-		global_position_int = 0;
-		position_target_local_ned = 0;
-		position_target_global_int = 0;
-		highres_imu = 0;
-		attitude = 0;
-	}
+	// Default input arguments
+#ifdef __APPLE__
+	char *uart_name = (char*)"/dev/tty.usbmodem1";
+#else
+	char *uart_name = (char*)"/dev/ttyACM0";
+#endif
+	int baudrate = 115200;
 
-};
+	// do the parse, will throw an int if it fails
+	parse_commandline(argc, argv, uart_name, baudrate);
 
 
-// Struct containing information on the MAV we are currently connected to
-
-struct Mavlink_Messages {
-
-	int sysid;
-	int compid;
-
-	// Heartbeat
-	mavlink_heartbeat_t heartbeat;
-
-	// System Status
-	mavlink_sys_status_t sys_status;
-
-	// Battery Status
-	mavlink_battery_status_t battery_status;
-
-	// Radio Status
-	mavlink_radio_status_t radio_status;
-
-	//Raw input channels
-	mavlink_rc_channels_raw_t rc_channels_raw_t;
-
-	// Local Position
-	mavlink_local_position_ned_t local_position_ned;
-
-	// Global Position
-	mavlink_global_position_int_t global_position_int;
-
-	// Local Position Target
-	mavlink_position_target_local_ned_t position_target_local_ned;
-
-	// Global Position Target
-	mavlink_position_target_global_int_t position_target_global_int;
-
-	// HiRes IMU
-	mavlink_highres_imu_t highres_imu;
-
-	// Attitude
-	mavlink_attitude_t attitude;
-
-    	//version
-    	mavlink_autopilot_version_t autopilot_version;
 
 
-    	//power status
-    	mavlink_power_status_t power_status_t;
+	// --------------------------------------------------------------------------
+	//   PORT and THREAD STARTUP
+	// --------------------------------------------------------------------------
 
-    	// ack of commands
-    	mavlink_command_ack_t mavlink_command_ack;
-
-    	// ack of missions cmd
-    	mavlink_mission_ack_t mavlink_mission_ack;
-
-    	//mission item return from mission request by sending seq number
-    	mavlink_mission_item_t mavlink_mission_item;
-
-    	//mission current seq number
-    	mavlink_mission_current_t mavlink_mission_current;
-
-    	//mission count returned from mission request list only seq numbers
-    	mavlink_mission_count_t mavlink_mission_count;
-
-    	//mission item reached
-    	mavlink_mission_item_reached_t malink_mission_item_reached;
-
-	//current waypoint that the pixhawk is traveling to
-	mavlink_mission_current_t mission_current_t;
+	/*
+	 * Instantiate a serial port object
+	 *
+	 * This object handles the opening and closing of the offboard computer's
+	 * serial port over which it will communicate to an autopilot.  It has
+	 * methods to read and write a mavlink_message_t object.  To help with read
+	 * and write in the context of pthreading, it gaurds port operations with a
+	 * pthread mutex lock.
+	 *
+	 */
+	Serial_Port serial_port(uart_name, baudrate);
 
 
-	//--------------------------------------------------------------
-	// Additional System Parameters
-	//--------------------------------------------------------------
+	/*
+	 * Instantiate an autopilot interface object
+	 *
+	 * This starts two threads for read and write over MAVlink. The read thread
+	 * listens for any MAVlink message and pushes it to the current_messages
+	 * attribute.  The write thread at the moment only streams a position target
+	 * in the local NED frame (mavlink_set_position_target_local_ned_t), which
+	 * is changed by using the method update_setpoint().  Sending these messages
+	 * are only half the requirement to get response from the autopilot, a signal
+	 * to enter "offboard_control" mode is sent by using the enable_offboard_control()
+	 * method.  Signal the exit of this mode with disable_offboard_control().  It's
+	 * important that one way or another this program signals offboard mode exit,
+	 * otherwise the vehicle will go into failsafe.
+	 *
+	 */
+	Autopilot_Interface autopilot_interface(&serial_port);
 
-	//ADS-B Information
-	mavlink_adsb_vehicle_t adsb_vehicle_t;
+	/*
+	 * Setup interrupt signal handler
+	 *
+	 * Responds to early exits signaled with Ctrl-C.  The handler will command
+	 * to exit offboard mode if required, and close threads and the port.
+	 * The handler in this example needs references to the above objects.
+	 *
+	 */
+	serial_port_quit         = &serial_port;
+	autopilot_interface_quit = &autopilot_interface;
+	signal(SIGINT,quit_handler);
+
+	/*
+	 * Start the port and autopilot_interface
+	 * This is where the port is opened, and read and write threads are started.
+	 */
+	serial_port.start();
+
+	autopilot_interface.messages_to_read.read_global_position_int = true;
+	autopilot_interface.messages_to_read.read_heartbeat = true;
+ 	autopilot_interface.messages_to_read.read_attitude = true;
+
+	autopilot_interface.start();
+	printf("START COLLISION AVOIDANCE");
+	//---------------------------------------------------------------------------
+	//START COLLISION AVOIDANCE THREAD
+	//---------------------------------------------------------------------------
 	
+	autopilot_interface.start_collision_avoidance();
+
+	// --------------------------------------------------------------------------
+	//   RUN COMMANDS
+	// --------------------------------------------------------------------------
+
+	/*
+	 * Now we can implement the algorithm we want on top of the autopilot interface
+	 */
+	commands(autopilot_interface);
 
 
+	// --------------------------------------------------------------------------
+	//   THREAD and PORT SHUTDOWN
+	// --------------------------------------------------------------------------
+
+	/*
+	 * Now that we are done we can stop the threads and close the port
+	 */
+	autopilot_interface.stop();
+	serial_port.stop();
 
 
-	// Time Stamps
-	Time_Stamps time_stamps;
+	// --------------------------------------------------------------------------
+	//   DONE
+	// --------------------------------------------------------------------------
 
-	void
-	reset_timestamps()
-	{
-		time_stamps.reset_timestamps();
-	}
+	// woot!
+	return 0;
 
-};
+}
+
+
+// ------------------------------------------------------------------------------
+//   COMMANDS
+// ------------------------------------------------------------------------------
+
+void
+commands(Autopilot_Interface &api)
+{
 
 
 /*
- * Boolean value for the desired messages to be read
- * Ex: To read battery status. Set read_battery_status to true
- */
-struct Read_Messages {
+		printf("Requested waypoints\n");
+		api.Request_Waypoints();
+		mavlink_mission_item_t avoidWaypoint = api.create_waypoint(34.213354, -117.321498, 50, 5, 20);
+		
+		uint16_t seq = 3;
+		
+		api.insert_waypoint ( avoidWaypoint, seq );
 
+*/		
+			int i;
+			float velocity;
+		for (i = 0; i <1000; i++) {
 
-    bool read_heartbeat;
-    bool read_sys_status;
-    bool read_battery_status;
-    bool read_radio_status;
-    bool read_local_position_ned;
-    bool read_global_position_int;
-    bool read_position_target_local_ned;
-    bool read_position_target_global_int;
-    bool read_highres_imu;
-    bool read_attitude;
-    bool read_autopilot_version;
-    bool read_power_status;
-    bool read_mission_ack;
-    bool read_command_ack;
+			velocity = api.current_messages.global_position_int.vx;
+			printf("\n\nvx %f\n\n", (velocity/100));
 
-    /*Default to not read any messages*/
-    Read_Messages()
-    {
-        read_heartbeat = false;
-        read_sys_status = false;
-        read_battery_status = false;
-        read_radio_status = false;
-        read_local_position_ned = false;
-        read_global_position_int = false;
-        read_position_target_local_ned = false;
-        read_position_target_global_int = false;
-        read_highres_imu = false;
-        read_attitude = false;
-        read_autopilot_version = false;
-        read_power_status = false;
-        read_mission_ack = false;
-        read_command_ack = false;
+		sleep(2);
+		}	
 
-    }
+	// --------------------------------------------------------------------------
+	//   END OF COMMANDS
+	// --------------------------------------------------------------------------
+	
+	return;
 
-};
-
-
-	//gh
-
-// ----------------------------------------------------------------------------------
-//   Autopilot Interface Class
-// ----------------------------------------------------------------------------------
-/*
- * Autopilot Interface Class
- *
- * This starts two threads for read and write over MAVlink. The read thread
- * listens for any MAVlink message and pushes it to the current_messages
- * attribute.  The write thread at the moment only streams a position target
- * in the local NED frame (mavlink_set_position_target_local_ned_t), which
- * is changed by using the method update_setpoint().  Sending these messages
- * are only half the requirement to get response from the autopilot, a signal
- * to enter "offboard_control" mode is sent by using the enable_offboard_control()
- * method.  Signal the exit of this mode with disable_offboard_control().  It's
- * important that one way or another this program signals offboard mode exit,
- * otherwise the vehicle will go into failsafe.
- */
-
+}
 
 
 // ------------------------------------------------------------------------------
-//   Helper Struct
+//   Parse Command Line
 // ------------------------------------------------------------------------------
-struct Waypoint{
-    double lat;
-    double lon;
-    int alt;
-    Waypoint(double lat = 0, double lon = 0, int alt = 0){
-        this->lat = lat;
-        this->lon = lon;
-        this->alt = alt;
-    }
-};
-
-
-struct aircraftInfo {
-
-
-	aircraftInfo();
-
-	//Aircraft positions
-	// 0: current position, 1: last position (one second in the past), 2: very last position (two seconds in the past)
-	double lat [3];
-	double lon [3];
-	double alt [3];
-
-	//Aircraft velocity and accelerations
-	//0: current velocity/acceleration, 1: last velocity (one second in the past)
-	float velocityX [2];
-	float velocityY [2];
-	double xAcc;
-	double yAcc;
-
-	//Information for the predict function
-	//0: Predicted point
-	//1: Point that is .01 second in front of the predicted point
-	//2: Distance between predicted point 0 and 1
-	double futureDistx [3];
-	double futureDisty [3];
-
-	//Predicted heading
-	float Hdg;
-	
-/*	Creats a safety bubble around the aircraft that increases in radius with each
-	predicted future way point up to 10 way points	*/
-	uint64_t safetyBubble; 
-
-	uint8_t priority;
-
-};
-
-struct predictedCollision {
-
-	float timeToCollision;
-	bool collisionDetected;
-	float relativeHeading;
-};
-
-class Autopilot_Interface
+// throws EXIT_FAILURE if could not open the port
+void
+parse_commandline(int argc, char **argv, char *&uart_name, int &baudrate)
 {
+printf("hello");
 
-public:
+	// string for command line usage
+	const char *commandline_usage = "usage: mavlink_serial -d <devicename> -b <baudrate>";
 
-	Autopilot_Interface();
-	Autopilot_Interface(Serial_Port *serial_port_);
-	~Autopilot_Interface();
+	// Read input arguments
+	for (int i = 1; i < argc; i++) { // argv[0] is "mavlink"
 
-	char reading_status;
-	char writing_status;
-	char control_status;
-	char CA_status;
-	uint64_t write_count;
+		// Help
+		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+			printf("%s\n",commandline_usage);
+			throw EXIT_FAILURE;
+		}
 
-   	int system_id;
-	int autopilot_id;
-	int companion_id;
+		// UART device ID
+		if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--device") == 0) {
+			if (argc > i + 1) {
+				uart_name = argv[i + 1];
 
-	Mavlink_Messages current_messages;
-	mavlink_set_position_target_local_ned_t initial_position;
-	Read_Messages messages_to_read; //Messages to read
+			} else {
+				printf("%s\n",commandline_usage);
+				throw EXIT_FAILURE;
+			}
+		}
 
-	void update_setpoint(mavlink_set_position_target_local_ned_t setpoint);
-	void read_messages();
-	int  write_message(mavlink_message_t message);
+		// Baud rate
+		if (strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--baud") == 0) {
+			if (argc > i + 1) {
+				baudrate = atoi(argv[i + 1]);
 
-	void enable_offboard_control();
-	void disable_offboard_control();
+			} else {
+				printf("%s\n",commandline_usage);
+				throw EXIT_FAILURE;
+			}
+		}
 
-	void start();
-	void stop();
+	}
+	// end: for each input argument
 
-	void start_read_thread();
-	void start_write_thread(void);
-
-	void handle_quit( int sig );
-
-	//------------------------------------------------------------------------
-	//Collision avoidance definitions
-	//------------------------------------------------------------------------
-	
-
-
-	char reading_waypoint_status;
-	int error_counter;
-	uint16_t currentWaypoint;
-	float AVOID_BUFFER;
-
-	// This plays a part in how large the AVOID_BUFFER will be
-	const int avoidBufferSize = 100;
-	
-
-	
+	// Done!
+	return;
+}
 
 
-	aircraftInfo ourAircraft, otherAircraft;
-	std::vector<mavlink_mission_item_t> currentMission;
-	predictedCollision collisionPoint;
-
-
-
-
-	//---------------------------------------------------
-	//New functions
-	//---------------------------------------------------
-
-	void write_set_servo(const int &servo, const int &pwm);
-
-	void write_waypoints(std::vector<mavlink_mission_item_t> waypoints);
-
-	bool recieved_all_messages(const Time_Stamps &time_stamps);
-
-	int send_waypoint_count(mavlink_mission_count_t mavlink_mission_count);
-
-	mavlink_mission_item_t create_waypoint(const float &lat, const float &lon, const int &alt,const int &wp_number,
-                                               const int &radius);
-
-	mavlink_mission_item_t createNewDisplacedWaypoint(const double & deltaX, const double & deltaY, const mavlink_mission_item_t & b);
-
-	double gpsDistance(const double &target_lat, const double &target_long, const double &current_lat, const double &current_long);
-
-	void setCurrentWaypoint( uint16_t &waypointNum );//Tells the autopilot to go to a specific, pre-loaded waypoint
-
-	void Request_Waypoints();
-	void Receive_Waypoints();
-	void insert_waypoint ( mavlink_mission_item_t &newWaypoint, uint16_t &desiredSeqNumber );
-
-
-	//Collision Avoidance functions
-
-	void start_collision_avoidance(); //Runs first to start collision avoidance
-
-	void collision_avoidance_begin(); //Runs 3rd to check if the collision avoidance thread is running
-
-	void CA_predict_thread(); //Runs 4th: actual predict thread
-
-	predictedCollision CA_Predict(aircraftInfo & aircraftA, aircraftInfo & aircraftB);
-	
-	void CA_Avoid( aircraftInfo & aircraftA, aircraftInfo & aircraftB, predictedCollision &collision);
-
-	//Creates an avoid waypoint
-	mavlink_mission_item_t NewAvoidWaypoint(const double & deltaX, const double & deltaY, aircraftInfo & pos);
-
-private:
-
-	Serial_Port *serial_port;
-
-	bool time_to_exit;
-
-	pthread_t read_tid;
-	pthread_t write_tid;
-	pthread_t CA_tid;
-
-	mavlink_set_position_target_local_ned_t current_setpoint;
-
-	void read_thread();
-	void write_thread(void);
-
-	int toggle_offboard_control( bool flag );
-	void write_setpoint();
-
-};
-
-
-
-class Collision_Avoidance
+// ------------------------------------------------------------------------------
+//   Quit Signal Handler
+// ------------------------------------------------------------------------------
+// this function is called when you press Ctrl-C
+void
+quit_handler( int sig )
 {
-	public:
-	int randint;
-};
+	printf("\n");
+	printf("TERMINATING AT USER REQUEST\n");
+	printf("\n");
+
+	// autopilot interface
+	try {
+		autopilot_interface_quit->handle_quit(sig);
+	}
+	catch (int error){}
+
+	// serial port
+	try {
+		serial_port_quit->handle_quit(sig);
+	}
+	catch (int error){}
+
+	// end program here
+	exit(0);
+
+}
 
 
+// ------------------------------------------------------------------------------
+//   Main
+// ------------------------------------------------------------------------------
+int
+main(int argc, char **argv)
+{
+printf("hello");
+	// This program uses throw, wrap one big try/catch here
+	try
+	{
+		int result = top(argc,argv);
+		return result;
+	}
 
+	catch ( int error )
+	{
+		fprintf(stderr,"mavlink_control threw exception %i \n" , error);
+		return error;
+	}
 
-#endif // AUTOPILOT_INTERFACE_H_
+}
 
