@@ -1,6 +1,5 @@
-//hey there
 /****************************************************************************
- 
+ *
  *   Copyright (c) 2014 MAVlink Development Team. All rights reserved.
  *   Author: Trent Lukaczyk, <aerialhedgehog@gmail.com>
  *           Jaycee Lock,    <jaycee.lock@gmail.com>
@@ -80,8 +79,6 @@ using std::cout;
 
 using std::string;
 using namespace std::chrono;
-
-
 
 //overloaded simple string conversion methods
 string convertToString(bool var)
@@ -1057,7 +1054,7 @@ write_set_servo(const int &servo, const int &pwm)
  */
 void
 Autopilot_Interface::
-write_waypoints(std::vector<mavlink_mission_item_t> waypoints, uint16_t seq) {
+write_waypoints(std::vector<mavlink_mission_item_t> waypoints) {
 
     printf("Sending Waypoints\n");
     writing_status = true;
@@ -1065,7 +1062,6 @@ write_waypoints(std::vector<mavlink_mission_item_t> waypoints, uint16_t seq) {
     //Pixhawk needs to know how many waypoints it will receive
     mavlink_mission_count_t mission_count;
     mission_count.count = (int) waypoints.size();
-	  printf("mission_count.count %i\n",mission_count.count);
     if(send_waypoint_count(mission_count) <= 0){
         fprintf(stderr,"WARNING: could not send waypoint count \n");
     }
@@ -1076,10 +1072,7 @@ write_waypoints(std::vector<mavlink_mission_item_t> waypoints, uint16_t seq) {
         waypoints[i].target_component = autopilot_id;
         waypoints[i].frame = MAV_FRAME_GLOBAL_RELATIVE_ALT;
         waypoints[i].autocontinue = true;
-
-		  //if (i == seq) {waypoints[i].current = 1;}
-		  //else          {waypoints[i].current = 0;}
-
+        waypoints[i].current = 1;
         mavlink_message_t message;
         mavlink_msg_mission_item_encode(system_id, companion_id, &message, &waypoints[i]);
 
@@ -1090,7 +1083,6 @@ write_waypoints(std::vector<mavlink_mission_item_t> waypoints, uint16_t seq) {
 
     writing_status = false;
 }
-
 
 /*
  * Tells pixhawk how many waypoints it will recieve
@@ -1162,28 +1154,9 @@ mavlink_mission_item_t
 Autopilot_Interface::create_waypoint(const float &lat, const float &lon, const int &alt, const int &wp_number, const int &radius) {
     mavlink_mission_item_t mission_item;
     mission_item.command = MAV_CMD_NAV_WAYPOINT;
-	//printf("COMMAND: %i\n", mission_item.command);
     mission_item.param1 = 0;//hold time in decimal second IGNORED by ArduPlane
     mission_item.param2 = radius;//Acceptance radius in meters
     mission_item.param3 = 0;//0 to pass through WP if >0 radius in meters to pass by WP
-    mission_item.param4 = 0;//Desired yaw angle NaN for unchanged
-    mission_item.x = lat;//latitude
-    mission_item.y = lon;//longitude
-    mission_item.z = alt;//altitude
-    mission_item.seq = wp_number;//waypoint number
-    return mission_item;
-}
-
-/*
- * Returns a mavlink acceptable loiter waypoint
- */
-mavlink_mission_item_t
-Autopilot_Interface::create_loiter_point(const float &lat, const float &lon, const int &alt, const int &wp_number, const int &radius) {
-    mavlink_mission_item_t mission_item;
-    mission_item.command = MAV_CMD_NAV_LOITER_UNLIM;
-    mission_item.param1 = 0;//hold time in decimal second IGNORED by ArduPlane
-    mission_item.param2 = 0; //empty
-    mission_item.param3 = radius;//0 to pass through WP if >0 radius in meters to pass by WP
     mission_item.param4 = NAN;//Desired yaw angle NaN for unchanged
     mission_item.x = lat;//latitude
     mission_item.y = lon;//longitude
@@ -1191,134 +1164,6 @@ Autopilot_Interface::create_loiter_point(const float &lat, const float &lon, con
     mission_item.seq = wp_number;//waypoint number
     return mission_item;
 }
-
-
-/*
- * Returns a mavlink acceptable loiter waypoint
- */
-mavlink_mission_item_t
-Autopilot_Interface::create_takeoff_point(const float &lat, const float &lon, const int &alt, const int &wp_number) {
-    mavlink_mission_item_t mission_item;
-    mission_item.command = MAV_CMD_NAV_TAKEOFF;
-    mission_item.param1 = 10;//desired pitch angle during takeoff
-    mission_item.param2 = 0; //empty
-    mission_item.param3 = 0;//empty
-    mission_item.param4 = NAN;//Desired yaw angle NaN for unchanged
-    mission_item.x = lat;//latitude
-    mission_item.y = lon;//longitude
-    mission_item.z = alt;//altitude
-    mission_item.seq = wp_number;//waypoint number
-    return mission_item;
-}
-
-
-/*
- * Returns a mavlink acceptable landing waypoint
- */
-mavlink_mission_item_t
-Autopilot_Interface::create_land_point(const float &lat, const float &lon, const int &wp_number) {
-    mavlink_mission_item_t mission_item;
-    mission_item.command = MAV_CMD_NAV_LAND;
-    mission_item.param1 = 40;//Minimum target altitude if landing is aborted
-    mission_item.param2 = 0; //empty
-    mission_item.param3 = 0;//empty
-    mission_item.param4 = NAN;//Desired yaw angle NaN for unchanged
-    mission_item.x = lat;//latitude
-    mission_item.y = lon;//longitude
-    mission_item.seq = wp_number;//waypoint number
-    return mission_item;
-}
-
-
-
-/*
- * Set aircraft mode
- */
-void
-Autopilot_Interface::setMode(std::string mode) {
-
-    int MODE;
-
-    if (mode == "AUTO")           { MODE = 92; } //MAV_MODE_AUTO_DISARMED
-    else if (mode == "STABILIZE") { MODE = 80; } //MAV_MODE_STABILIZE_DISARMED
-    else if (mode == "MANUAL")    { MODE = 64; } //MAV_MODE_MANUAL_DISARMED
-
-
-    writing_status = true;
-    // --------------------------------------------------------------------------
-    //   PACK PAYLOAD
-    // --------------------------------------------------------------------------
-
-    mavlink_command_long_t cmd;
-    cmd.target_system = system_id;
-    cmd.target_component = autopilot_id;
-    cmd.command = MAV_CMD_DO_SET_MODE;
-    cmd.param1 = MODE;
-    
-    // --------------------------------------------------------------------------
-    //   ENCODE
-    // --------------------------------------------------------------------------
-
-    mavlink_message_t message;
-    mavlink_msg_command_long_encode(system_id,companion_id, &message, &cmd);
-
-
-    // --------------------------------------------------------------------------
-    //   WRITE
-    // --------------------------------------------------------------------------
-
-    // do the write
-    int len = write_message(message);
-    printf("MODE: %u\n", MODE);
-    // check the write
-    if ( len <= 0 )
-        fprintf(stderr,"WARNING: could not change MODE \n");
-
-    writing_status = false;
-
-    return;
-}
-
-
-
-
-
-/*
- * Arm aircraft
- */
-void
-Autopilot_Interface::arm_disarm(int arm) {
-//Value of 1 arms the autopilot, value of 0 disarms the autopilot
-
-    if (arm == 1) printf("Arming... \n");
-    if (arm == 0) printf("Disarming... \n");
-    if (arm != 0 && arm != 1) {printf("Not a valid command!\n"); return; }
-
-    writing_status = true;
-
-    mavlink_command_long_t cmd;
-    cmd.target_system = system_id;
-    cmd.target_component = autopilot_id;
-    cmd.command = MAV_CMD_COMPONENT_ARM_DISARM;
-    cmd.param1 = arm;
-
-    mavlink_message_t message;
-    mavlink_msg_command_long_encode(system_id,companion_id, &message, &cmd);
-
-    // do the write
-    int len = write_message(message);
-
-    // check the write
-    if ( len <= 0 )
-        fprintf(stderr,"WARNING: could not ARM/DISARM \n");
-    writing_status = false;
-
-    return;
-}
-
-
-
-
 
 /*Return a new position given the x and y displacement in meters of a waypoint
   The waypoint is created off an existing mission item*/
@@ -1360,35 +1205,29 @@ createNewDisplacedWaypoint(const double & deltaX, const double & deltaY, const m
 //Return a new position given the x and y displacement in meters of an avoid waypoint
 //The waypoint is created off of the current position of the aircraft
 mavlink_mission_item_t
-Autopilot_Interface::NewAvoidWaypoint(const double & deltaX, const double & deltaY, aircraftInfo & pos){
+Autopilot_Interface::
+NewAvoidWaypoint(const double & deltaX, const double & deltaY, aircraftInfo & pos){
  
     //INPUTS: deltaX and deltaY in meters
     //	      pos: current lat,lon position of the aircraft
     // NOTE: This function uses NED frame. Therefore, +x = North = dLat
     //                                                +y = East  = dLon    
 
-	 //printf("deltax %f\n", deltaX);
+
     //Convert from cartesian to NED frame. For ease of understanding
-    double deltaX_NED = deltaX;
-    double deltaY_NED = deltaY;
+    double deltaX_NED = deltaY;
+    double deltaY_NED = deltaX;
 
     //coordinate offset in Radians
-    double deltaLat = deltaX_NED  / RADIUS_EARTH;
-    double deltaLon = deltaY_NED  / RADIUS_EARTH;
-
-	 //printf("deltaLat(1) %f\n", deltaLat);
+    double deltaLat =  deltaX_NED / RADIUS_EARTH; //This may need to be updated later
+    double deltaLon = deltaY_NED / RADIUS_EARTH;
 
     mavlink_mission_item_t newPosition;
     
-	 //printf("pos.lat[0] %f\n", pos.lat[0] );
-    newPosition.x = pos.lat[0]  + (deltaLat / (3.14159265359/180.0) );
-    newPosition.y = pos.lon[0]  + (deltaLon / (3.14159265359/180.0) );
+    newPosition.x = pos.lat[0] + (deltaLat * (180 / PI));
+    newPosition.y = pos.lon[0] + (deltaLon * (180 / PI));
 
-	 //printf("deltaLat %f\n", deltaLat/(3.14159265359/180.0));
-	 //printf("deltaLon %f\n", deltaLon/(3.14159265359/180.0));
-
-	 //printf("newPosition.x %f\n", newPosition.x);
-
+    //newPosition.seq = seq;    
     return newPosition;
 
 }
@@ -1536,7 +1375,7 @@ setCurrentWaypoint( uint16_t &waypointNum )
 
 
 //mavlink_mission_item_int_t
-bool
+void
 Autopilot_Interface::
 Request_Waypoints()
 {
@@ -1545,7 +1384,7 @@ Request_Waypoints()
 
 	if (reading_waypoint_status != 0) {
 		printf("ERROR: WAYPOINTS ALREADY REQUESTED\n");
-		return NULL;
+		return;
 	}
 
 	printf("REQUESTING WAYPOINTS\n");
@@ -1559,45 +1398,9 @@ Request_Waypoints()
 	if ( write_message(message) <= 0 )
 	fprintf(stderr,"WARNING: could not send MAV_CMD_REQUEST_WAYPOINTS \n");
 
-
-	//Receive waypoint count
-	int counter = 0;
-	mavlink_mission_count_t missionCount = current_messages.mavlink_mission_count;
-	
-	bool waypointError = false;
-	// This is a catch for errors
-	//Give the autopilot some time to receive the message
-	while (missionCount.count < 0.1 && counter < 1000) {
-		printf("error catch");
-		missionCount = current_messages.mavlink_mission_count;
-		counter++;
-		usleep(10000);
-	}
-
-
-	// In the case that the waypoint was not received while waiting in the previous function, then return an error
-	if (missionCount.count < 0.1 && !time_to_exit) {
-		printf("TIMEOUT: MISSION COUNT NOT RECEIVED\n");
-		waypointError = true;
-	}
-
-
-	if (missionCount.count > 1000) {
-
-		waypointError = true;
-		printf("WAYPOINT COUNT NOT RECEIVED: TRY AGAIN\n");
-		error_counter++;
-	}
-
-	if (waypointError == true) {
-	printf("ERROR: WAYPOINT COUNT NOT RECEIVED\n");
-	reading_waypoint_status = false;
-	return waypointError;
-	}
-
 	//For some reason this function needs to end if the waypoint message is to be read
 	Receive_Waypoints();
-
+	
 	//printf("Current mission size: %lu\n", currentMission.size());
 	reading_waypoint_status = false;
 
@@ -1605,11 +1408,64 @@ Request_Waypoints()
 
 
 
-bool
+void
 Autopilot_Interface::
 Receive_Waypoints() {
 
-	printf("RECEIVING WAYPOINTS\n");
+	//printf("RECEIVING WAYPOINTS\n"); 
+
+	//Receive waypoint count
+	int counter = 0;
+	mavlink_mission_count_t missionCount = current_messages.mavlink_mission_count;
+	
+	bool waypointError = true;
+	while ( waypointError ) {
+
+		//Give the autopilot some time to receive the message
+		while (missionCount.count < 0.1 && counter < 1000) {
+	
+			missionCount = current_messages.mavlink_mission_count;
+
+			counter++;
+			usleep(10000);
+		}
+	
+		waypointError = false;
+
+		if (missionCount.count < 0.1 && !time_to_exit) {
+		printf("TIMEOUT: MISSION COUNT NOT RECEIVED\n");
+		waypointError = true;
+		reading_waypoint_status = false;
+		Request_Waypoints();
+		break;
+		}
+
+		
+		if (missionCount.count > 1000)  {
+			int i;
+			for (i=0; i<100; i++){
+
+				usleep(100000);
+			}
+
+			
+
+			if (missionCount.count > 1000) {
+
+				waypointError = true;
+				printf("WAYPOINT COUNT NOT RECEIVED: TRY AGAIN\n");
+				reading_waypoint_status = false;
+				error_counter++;
+				Request_Waypoints();
+				
+				return;
+			}
+			printf("ERROR: WAYPOINT COUNT NOT RECEIVED\n");
+			return;
+		}
+
+	}
+
 	//---------------------------------------------------------------------
 	//Send request then receive each waypoint of the mission
 	//---------------------------------------------------------------------
@@ -1617,9 +1473,9 @@ Receive_Waypoints() {
 	int seqNum = 0; // The current waypoint we are requesting and receiving
  	mavlink_message_t message;
 	mavlink_mission_item_t missionItem = current_messages.mavlink_mission_item;
-	mavlink_mission_count_t missionCount = current_messages.mavlink_mission_count;
 
-	//printf("Number of waypoints: %i\n\n", missionCount.count);
+
+	printf("Number of waypoints: %i\n\n", missionCount.count);
 
 	for (seqNum = 0;  seqNum < missionCount.count;  seqNum++) {
 
@@ -1641,8 +1497,8 @@ Receive_Waypoints() {
 		missionItem = current_messages.mavlink_mission_item;
 
 		//Account for whether the mission already has elements in it
-		if (currentMission.size() > seqNum) { currentMission[seqNum] = create_waypoint(missionItem.x, missionItem.y, missionItem.z, missionItem.seq, missionItem.param2); }
-		else { currentMission.push_back(create_waypoint(missionItem.x, missionItem.y, missionItem.z, missionItem.seq, missionItem.param2)); }
+		if (currentMission.size() > seqNum) { currentMission[seqNum] = missionItem; }
+		else { currentMission.push_back(missionItem); }
 
 
 		//Makes sure the waypoint is written to the right vector element and isn't skipped
@@ -1652,7 +1508,7 @@ Receive_Waypoints() {
 		//printf("seqNum: %i\n", seqNum);
 		//printf("current mission seq: %i\n", currentMission[seqNum].seq);
 		
-		while (seqNum != currentMission[seqNum].seq && !time_to_exit) {
+		while (seqNum != currentMission[seqNum].seq && !waypointError && !time_to_exit) {
 
 			missionItem = current_messages.mavlink_mission_item;
 			currentMission[seqNum] = missionItem;
@@ -1690,7 +1546,6 @@ aircraftInfo() {
 	//Descriptions are in the aircraftInfo struct
 	lat [3] = {0};
 	lon [3] = {0};
-	gpsTime [3] = {0};
 	alt [3] = {0};
 	velocityX [2] = {0};
 	velocityY [2] = {0};
@@ -1698,8 +1553,8 @@ aircraftInfo() {
 	yAcc = 0;
 	futureDistx [3] = {0};
 	futureDisty [3] = {0};
-	Hdg [2] = {0};
-	safetyBubble = 20;  //Roughly 60 ft
+	Hdg = 0;
+	safetyBubble = 5;  //Roughly 60 ft
 	priority = 0;
 
 }
@@ -1716,7 +1571,7 @@ start_collision_avoidance()
 	result = pthread_create( &CA_tid, NULL, &start_collision_avoidance_thread, this );
 	if ( result ) throw result;
 
-	//printf("\nSTART COLLISION AVOIDANCE THREAD\n");
+	printf("START COLLISION AVOIDANCE THREAD\n\n");
 }
 
 void
@@ -1747,104 +1602,28 @@ insert_waypoint ( mavlink_mission_item_t &newWaypoint, uint16_t &desiredSeqNumbe
 		//-----------------------------------------------------------------------
 
 
-		printf("Current mission size: %lu\n", currentMission.size());
+		//printf("Current mission size: %lu\n", currentMission.size());
 
 			currentMission.push_back(currentMission[0]); //Takes first element and copies it to last for dummy data
 			int endVal = currentMission.size() - desiredSeqNumber;
 			int i;
 
 			for (i = 0; i < endVal; i++) {
-				//printf("\nLatitude before %f\n", currentMission.rbegin()[i].x);
+												//printf("\nLatitude before %f\n", currentMission.rbegin()[i].x);
 				currentMission.rbegin()[i] = currentMission.rbegin()[(i+1)]; //Shifts waypoints over until the inserted waypoint is reached
 				currentMission.rbegin()[i].seq = currentMission.size() - (i+1);
+												//printf("Latitude after %f\n", currentMission.rbegin()[i].x);
 
 			}
 	
 		newWaypoint.z = currentMission[endVal].z; //I chose endVal because it is guaranteed to always be there
 		newWaypoint.seq = desiredSeqNumber;
+		currentMission[desiredSeqNumber] = create_waypoint(newWaypoint.x, newWaypoint.y, currentMission[endVal].z, desiredSeqNumber, 15);
 
-		currentMission[desiredSeqNumber] = create_waypoint(newWaypoint.x, newWaypoint.y, newWaypoint.z, desiredSeqNumber, 15);
 
-		printf("alt: %f, %f", currentMission[0].z, currentMission[1].z);
 	//Write avoid waypoint within mission
-		printf("Seq: %d, %d, %d, %d, %d, %d\n", currentMission[0].seq, currentMission[1].seq, currentMission[2].seq, currentMission[3].seq, currentMission[4].seq, currentMission[5].seq);
-	write_waypoints(currentMission, desiredSeqNumber);
+	write_waypoints(currentMission);
 
-}
-
-
-void
-Autopilot_Interface::
-updateAircraftInfo(aircraftInfo &aircraftObj, mavlink_global_position_int_t gpos, mavlink_adsb_vehicle_t adsb, int plane)
-{
-
-	float groundSpeed;
-
-	//Shift previous data backwards
-	aircraftObj.lat[2] = aircraftObj.lat[1];
-	aircraftObj.lon[2] = aircraftObj.lon[1];
-   aircraftObj.gpsTime[2] = aircraftObj.gpsTime[1];
-	aircraftObj.lat[1] = aircraftObj.lat[0];
-	aircraftObj.lon[1] = aircraftObj.lon[0];
-	aircraftObj.gpsTime[1] = aircraftObj.gpsTime[0];
-
-	aircraftObj.Hdg[1] = aircraftObj.Hdg[0];
-
-	aircraftObj.velocityX[1] = aircraftObj.velocityX[0];
-	aircraftObj.velocityY[1] = aircraftObj.velocityY[0];
-	aircraftObj.vTan[1]      = aircraftObj.vTan[0];
-
-	if (plane == 1) { //If working with the controlled plane, grab from internal
-		aircraftObj.lat[0] 		  = gpos.lat / 1E7;
-		aircraftObj.lon[0] 	     = gpos.lon / 1E7;
-
-		aircraftObj.gpsTime[0]       = gpos.time_boot_ms;
-
-		// Derive velocity and heading from distance vectors
-		mavlink_mission_item_t distVec = distanceVectors(aircraftObj.lat[0], aircraftObj.lon[0], aircraftObj.lat[1], aircraftObj.lon[1]);
-		
-		aircraftObj.velocityX[0] = distVec.x / ((aircraftObj.gpsTime[0] - aircraftObj.gpsTime[1]) / 1000.0);
-		aircraftObj.velocityY[0] = distVec.y / ((aircraftObj.gpsTime[0] - aircraftObj.gpsTime[1]) / 1000.0);
-		aircraftObj.Hdg[0] = atan2(distVec.y, distVec.x);
-
-		//printf("Aircraft dist x: %f\n", distVec.x);
-		//printf("Aircraft dist y: %f\n", distVec.y);
-		
-		//printf("Aircraft Velocity x: %f\n", aircraftObj.velocityX[0]);
-		//printf("Aircraft Velocity y: %f\n", aircraftObj.velocityY[0]);
-		//printf("Time diff: %f\n", (aircraftObj.gpsTime[0] - aircraftObj.gpsTime[1]) / 1000.0);
-/* Doing heading and velocity seems to be giving errors
-		aircraftObj.velocityX[0]  = gpos.vx  / 100.0; //NED Frame: x = North = Latitude
-		aircraftObj.velocityY[0]  = gpos.vy  / 100.0; //           y = East  = longitude
-		aircraftObj.Hdg[0]        = gpos.hdg / 100.0;
-*/
-
-		aircraftObj.vTan[0]       = sqrt(pow(aircraftObj.velocityX[0],2) + pow(aircraftObj.velocityY[0], 2));
-
-		//printf("update gpos.lat: %f\n", gpos.lat/1E7);
-		//printf("update gpos.velx: %f\n", gpos.vx/100.0);
-		//printf("update gpos.vely: %f\n", gpos.vy/100.0);
-
-	}
-	else { // If working with other plane grab from ADS-B
-		aircraftObj.lat[0] = adsb.lat / 1E7;
-		aircraftObj.lon[0] = adsb.lon / 1E7;
-
-		// Derive velocity from heading (NED frame)
-		aircraftObj.Hdg[0] = adsb.heading / 100.0;
-		groundSpeed = adsb.hor_velocity / 100.0;
-
-		aircraftObj.velocityX[0] = groundSpeed * cos(aircraftObj.Hdg[0] * TO_RADIANS);
-		aircraftObj.velocityY[0] = groundSpeed * sin(aircraftObj.Hdg[0] * TO_RADIANS);
-		aircraftObj.vTan[0]      = sqrt(pow(aircraftObj.velocityX[0],2) + pow(aircraftObj.velocityY[0], 2));
-		//printf("update adsb.lat: %f\n", adsb.lat/1E7);
-	}
-
-
-	//Update our aircraft acceleration (acc) A
-	aircraftObj.xAcc = (aircraftObj.velocityX[0] - aircraftObj.velocityX[1]);//xAcc
-	aircraftObj.yAcc = (aircraftObj.velocityY[0] - aircraftObj.velocityY[1]);//yAcc
-	//printf("aircraftObj.xAcc: %f\n", aircraftObj.xAcc);
 }
 
 
@@ -1853,47 +1632,133 @@ Autopilot_Interface::
 CA_predict_thread()
 {
 
-
-	//------------------------------------------------
-	//Start detect/predict loop
-	//------------------------------------------------
 	CA_status = true;
-	int AVOID_DELAY = 0;
+
 	predictedCollision collision;
 	mavlink_global_position_int_t gpos = current_messages.global_position_int;
 	mavlink_adsb_vehicle_t adsb = current_messages.adsb_vehicle_t;
-	mavlink_adsb_vehicle_t dummydataADSB;
-	mavlink_global_position_int_t dummydataGPOS;
+	mavlink_mission_item_t otherVelocity; //FOR TESTING PURPOSES. MUST BE CHANGED LATER ALONG WITH "distanceVectors" FUNCTION
+	
+
+	int AVOID_DELAY = 0;
+
+	//printf("ho\n %f\n %f\n %f\n", otherAircraft.lat[0] / 1E7, otherAircraft.lat[1] / 1E7, otherAircraft.lat[2] / 1E7);
+/*
+	while (ourAircraft.lat[2] < 0.001 && ourAircraft.lat[2] > -0.001 && ! time_to_exit) {
+	
+
+		//update stored messages
+		gpos = current_messages.global_position_int;
+		adsb = current_messages.adsb_vehicle_t;
+
+		//Update our aircraft position
+		ourAircraft.lat[2] = ourAircraft.lat[1];
+		ourAircraft.lon[2] = ourAircraft.lon[1];
+
+		ourAircraft.lat[1] = ourAircraft.lat[0];		
+		ourAircraft.lon[1] = ourAircraft.lon[0];
+
+		ourAircraft.lat[0] = gpos.lat;
+		ourAircraft.lon[0] = gpos.lon;
+			
+
+		//Update other aircraft position
+		otherAircraft.lat[2] = otherAircraft.lat[1];
+		ourAircraft.lon[2] = otherAircraft.lon[1];
+
+		otherAircraft.lat[1] = otherAircraft.lat[0];		
+		ourAircraft.lon[1] = otherAircraft.lon[0];
+
+		otherAircraft.lat[0] = adsb.lat;
+		otherAircraft.lon[0] = adsb.lon;
+			
+		//Update our aircraft velocity
+		ourAircraft.velocityX[1] = ourAircraft.velocityX[0];
+		ourAircraft.velocityY[1] = ourAircraft.velocityY[1];		
+
+		ourAircraft.velocityX[0] = gpos.vx;
+		ourAircraft.velocityY[0] = gpos.vy;
+
+		//Update other aircraft velocity
+		otherAircraft.velocityX[1] = otherAircraft.velocityX[0];
+		otherAircraft.velocityY[1] = otherAircraft.velocityY[1];		
+
+		otherAircraft.velocityX[0] = adsb.hor_velocity;
+		otherAircraft.velocityY[0] = adsb.ver_velocity;
+
+		printf("\nWAITING FOR AIRCRAFT POSITION\n");
+		printf("CURRENT STATUS: %f %f %f\n", ourAircraft.lat[0] / 1E7, ourAircraft.lat[1] / 1E7, ourAircraft.lat[2] / 1E7);
+		sleep(1);
+		}
+*/
+
+	printf("\nPOSITION LOGGED\n");
+	//------------------------------------------------
+	//Start predict loop
+	//------------------------------------------------
 	double vx;
 	double vy;
 	//Prediction will occur once both aircraft vectors are updated
 	bool ourUpdated = false;
 	bool otherUpdated = false;
 	int fractionSinceUpdate = 0;
-
 	while ( ! time_to_exit ) {
 
-	  ///---------------------------------
-      ///
-      /// Gather All Parameters for Our Plane, such as lat,lon,velocity,acceleration, Heading,
-      ///
-      ///----------------------------------
 
 		//update stored messages
 		gpos = current_messages.global_position_int;
 		adsb = current_messages.adsb_vehicle_t;
 
+
+		///---------------------------------
+      ///
+      /// Gather All Parameters for Our Plane, such as lat,lon,velocity,acceleration, Heading,
+      ///
+      ///----------------------------------
+
+		
+		
+		//double test = ourAircraft.lat[0];
+
+		//printf("our lattitude: %lf\n", (double) gpos.lat/1E7);
+
+		//printf("stored lattitude: %lf\n", ourAircraft.lat[0]);
+		//double test2 = (double) gpos.lat/1E7;
+
+		//double output =  fabs(test - test2)*100000.00;
+
+		//printf("difference: %lf\n", output );
+
+
 		//If the current stored position is not equal to the gpos position i.e. the position message has been updated, then these vectors can be 			updated. Otherwise wait a little longer to update the array
-		//printf("our lat %f\n", ourAircraft.lat[0]);
-		//printf("our lon %f\n", ourAircraft.lon[0]);
+		if ( fabs(ourAircraft.lat[0] - (double) gpos.lat/1E7) > 0.000000000001 || fabs(ourAircraft.lon[0] - (double) gpos.lon/1E7) > 0.00000000001 ) {
+			
 
-		//printf("gpos lat %f\n", gpos.lat/1E7);
-		//printf("gpos lon %f\n", gpos.lon/1E7);
 
-		//Update check for the controlled aircraft
-		if ( fabs(ourAircraft.lat[0] - (double) gpos.lat/1E7) > 0.0000001 && fabs(ourAircraft.lon[0] - (double) gpos.lon/1E7) > 0.0000001 ) {
-			updateAircraftInfo(ourAircraft, gpos, dummydataADSB, 1);
 
+			//Update our aircraft position (X, Y) A
+			ourAircraft.lat[2] = ourAircraft.lat[1];
+			ourAircraft.lon[2] = ourAircraft.lon[1];
+
+			ourAircraft.lat[1] = ourAircraft.lat[0];		
+			ourAircraft.lon[1] = ourAircraft.lon[0];
+
+			ourAircraft.lat[0] = gpos.lat / 1E7;
+			ourAircraft.lon[0] = gpos.lon / 1E7;
+			
+			//Update our aircraft velocity (v) A, and heading
+			ourAircraft.velocityX[1] = ourAircraft.velocityX[0];
+			ourAircraft.velocityY[1] = ourAircraft.velocityY[0];		
+
+			ourAircraft.velocityX[0] = gpos.vy / 100.0;//NOTE: EXPERIMENTING WITH SWITCHING DIRECTIONS. Log output indicated that the velocity should be (y,x) rather than (x,y)
+			ourAircraft.velocityY[0] = gpos.vx / 100.0;
+
+			ourAircraft.Hdg = gpos.hdg / 100.0;
+			
+			//Update our aircraft acceleration (acc) A
+			ourAircraft.xAcc = (ourAircraft.velocityX[0] - ourAircraft.velocityX[1]);//xAcc
+			ourAircraft.yAcc = (ourAircraft.velocityY[0] - ourAircraft.velocityY[1]);//yAcc
+			
 			//Now that we have updated the position, lets inform the other functions
 			ourUpdated = true;
 		
@@ -1901,40 +1766,86 @@ CA_predict_thread()
 
 
 		//If the position has not been updated in the current messages then start counting
-		if ( fabs(otherAircraft.lat[0] - (double) adsb.lat/1E7) < 0.00001 && fabs(otherAircraft.lon[0] - (double) adsb.lon/1E7) < 0.00001)  {
+		if ( fabs(otherAircraft.lat[0] - (double) adsb.lat/1E7) < 0.00000000001 || fabs(otherAircraft.lon[0] - (double) adsb.lon/1E7) < 0.0000000001)  {
 			fractionSinceUpdate++; //Time = .3333*fractionSinceUpdate 
 		}
 		
-		
-		//printf("other lat  %f\n",otherAircraft.lat[0]);
-		//printf("other lon  %f\n",otherAircraft.lon[0]);
-		//printf("adsb lat  %f\n",adsb.lat/1E7);
-		//printf("adsb lon  %f\n",adsb.lon/1E7);
-		
-		if ( fabs(otherAircraft.lat[0] - (double) adsb.lat/1E7) > 0.000001 || fabs(otherAircraft.lon[0] - (double) adsb.lon/1E7) > 0.000001 ){
-			//Update other aircraft
-			updateAircraftInfo(otherAircraft, gpos, adsb, 2);
+
+		//printf("log criteria dist: %lf\n",(double) abs(otherAircraft.lat[0] - (double) adsb.lat/1E7));
+		if ( fractionSinceUpdate > 20 ) { //Get rid of zeros in otherAircraft vector[2]
+			//Update other aircraft position (X, Y) B
+			//Update other aircraft position (X, Y) B
+			otherAircraft.lat[2] = otherAircraft.lat[1];
+			otherAircraft.lon[2] = otherAircraft.lon[1];
+
+			otherAircraft.lat[1] = otherAircraft.lat[0];		
+			otherAircraft.lon[1] = otherAircraft.lon[0];
+
+			otherAircraft.lat[0] = adsb.lat / 1E7;
+			otherAircraft.lon[0] = adsb.lon / 1E7;
+
+			//Update other aircraft velocity (v) B
+			otherAircraft.velocityX[1] = otherAircraft.velocityX[0];
+			otherAircraft.velocityY[1] = otherAircraft.velocityY[0];	
+			
+			//Assume that we are receiving information at once a second. That is not a correct assumption but I need to get this shizzle tested somehow
+			otherVelocity = distanceVectors(otherAircraft.lat[0], otherAircraft.lon[0], otherAircraft.lat[1], otherAircraft.lon[1]); // divide by time between time stamps
+
+			//Current velocity (INPUT TO PREDICT IS CARTESIAN. THEREFORE WE CONVERT TO CARTESIAN HERE)
+			otherAircraft.velocityY[0] = otherVelocity.x;
+			otherAircraft.velocityX[0] = otherVelocity.y;
+
+			//Update other aircraft acceleration (acc) B
+			otherAircraft.xAcc = (otherAircraft.velocityX[0] - otherAircraft.velocityX[1]);//xAcc
+			otherAircraft.yAcc = (otherAircraft.velocityY[0] - otherAircraft.velocityY[1]);//yAcc
+			
+		}
+
+
+
+		if ( fabs(otherAircraft.lat[0] - (double) adsb.lat/1E7) > 0.00000000001 || fabs(otherAircraft.lon[0] - (double) adsb.lon/1E7) > 0.0000000001 ){
+			printf("logged!");
+			//Update other aircraft position (X, Y) B
+			otherAircraft.lat[2] = otherAircraft.lat[1];
+			otherAircraft.lon[2] = otherAircraft.lon[1];
+
+			otherAircraft.lat[1] = otherAircraft.lat[0];		
+			otherAircraft.lon[1] = otherAircraft.lon[0];
+
+			otherAircraft.lat[0] = adsb.lat / 1E7;
+			otherAircraft.lon[0] = adsb.lon / 1E7;
+
+			//Update other aircraft velocity (v) B
+			otherAircraft.velocityX[1] = otherAircraft.velocityX[0];
+			otherAircraft.velocityY[1] = otherAircraft.velocityY[0];	
+			
+			//Assume that we are receiving information at once a second. That is not a correct assumption but I need to get this shizzle tested somehow
+			otherVelocity = distanceVectors(otherAircraft.lat[0], otherAircraft.lon[0], otherAircraft.lat[1], otherAircraft.lon[1]); // divide by time between time stamps
+
+			//Current velocity (INPUT TO PREDICT IS CARTESIAN. THEREFORE WE CONVERT TO CARTESIAN HERE)
+			otherAircraft.velocityY[0] = otherVelocity.x;
+			otherAircraft.velocityX[0] = otherVelocity.y;
+
+			//Update other aircraft acceleration (acc) B
+			otherAircraft.xAcc = (otherAircraft.velocityX[0] - otherAircraft.velocityX[1]);//xAcc
+			otherAircraft.yAcc = (otherAircraft.velocityY[0] - otherAircraft.velocityY[1]);//yAcc
+			
 			
 			//Now that we have updated the position, lets inform the other functions
 			otherUpdated = true;
 			fractionSinceUpdate = 0;
-			//printf("logged!\n");
-		}
 
-		//printf("log criteria dist: %lf\n",(double) abs(otherAircraft.lat[0] - (double) adsb.lat/1E7));
-		if ( fractionSinceUpdate > 9 ) { //Get rid of zeros in otherAircraft vector[2]
-			updateAircraftInfo(otherAircraft, dummydataGPOS, adsb, 2);
 		}
-
 
 		//printf("Time since update: %i\n",fractionSinceUpdate);
-		//printf("Ours updated? %d\nOther updated? %d\n", ourUpdated, otherUpdated);
-		//printf("First condition satisfied: %d\n Second condition satisfied: %d\n",(ourUpdated && otherUpdated), (fractionSinceUpdate > 9 && ourUpdated == true));
+		printf("Ours updated? %d\nOther updated? %d\n", ourUpdated, otherUpdated);
+
+		printf("First condition satisfied: %d\n Second condition satisfied: %d\n",(ourUpdated && otherUpdated), (fractionSinceUpdate > 20 ));
 
 		//Predict now happens if both the ownships and the other aircraft's position has changed. Or it has been more than 3 seconds
-		if ((ourUpdated == true && otherUpdated == true) || (fractionSinceUpdate > 9 && ourUpdated == true )) { /*9 is 3 seconds since update speed is 1/3 of a second*/
+		if ((ourUpdated == true && otherUpdated == true) || (fractionSinceUpdate > 20 )) { /*9 is 3 seconds since update speed is 1/3 of a second*/
 				
-
+			printf("PREDICT\n");
 			//printf("1/3 seconds since ADS-B update: %i", fractionSinceUpdate);
 		
 			//log all the new position data
@@ -1949,27 +1860,26 @@ CA_predict_thread()
 			addToFile(convertToString(otherAircraft.lon[1]),"Other second Longitude");
 			addToFile(convertToString(otherAircraft.lat[0]),"Other Lattitude");
 			addToFile(convertToString(otherAircraft.lon[0]),"Other Longitude");
-			addToFile(convertToString(ourAircraft.velocityX[0]),"Our X Velocity");//NED
-			addToFile(convertToString(ourAircraft.velocityY[0]),"Our Y Velocity");//NED
-			addToFile(convertToString(otherAircraft.velocityX[0]),"Other X Velocity");//NED
-			addToFile(convertToString(otherAircraft.velocityY[0]),"Other Y Velocity");//NED
-			//printf("Done Logging\n");
-
-			//printf("\nPREDICT\n");			//Predict using the logged point
+			addToFile(convertToString(ourAircraft.velocityX[0]),"Our X Velocity");//Cartesian (E/W)
+			addToFile(convertToString(ourAircraft.velocityY[0]),"Our Y Velocity");//Cartesian (N/S)
+			addToFile(convertToString(otherAircraft.velocityX[0]),"Other X Velocity");//Cartesian
+			addToFile(convertToString(otherAircraft.velocityY[0]),"Other Y Velocity");//Cartesian
+		
+			//Predict using the logged point
 			collision = CA_Predict(ourAircraft, otherAircraft);
 			//collision.collisionDetected == true;
 			
-			printf("Collision predicted? %d\n", collision.collisionDetected);
+			//printf("Collision predicted? %d\n", collision.collisionDetected);
 		
 			//Avoid if necessary
 			if (collision.collisionDetected == true && AVOID_DELAY <=1 ) {
-				printf("Avoid function\n");
-				AVOID_DELAY = 28; //This is not a great way to keep multiple points from being written to the pixhawk 
+
+				AVOID_DELAY = 20; //This is not a great way to keep multiple points from being written to the pixhawk 
 				CA_Avoid(ourAircraft, otherAircraft, collision);
 			}
 
 
-			printf("Distance between aircraft: %f\n", gpsDistance(ourAircraft.lat[0], ourAircraft.lon[0], otherAircraft.lat[0], otherAircraft.lon[0]));
+			//printf("Distance between aircraft: %f\n", gpsDistance(ourAircraft.lat[0], ourAircraft.lon[0], otherAircraft.lat[0], otherAircraft.lon[0]));
 
 			if (AVOID_DELAY > 0) {
 				AVOID_DELAY--;
@@ -1980,11 +1890,13 @@ CA_predict_thread()
 			//Now that we have predicted we can revert the update boolians
 			ourUpdated = false;
 			otherUpdated = false;
-			printf("end predict with other updated = %d\n",otherUpdated);
+			//printf("end predict with other updated = %d\n",otherUpdated);
 			
 		}//End predict
 
 
+
+		
 		//Wait a third of a second before updating the next position
 		usleep(333333);
 		//usleep(1000000);
@@ -1996,219 +1908,176 @@ CA_predict_thread()
 
 }
 
-/* Function to find the distance vector between aircraft in NED frame
-vector<double>
-Autopilot_Interface::
-GPS2NEDvec(double currentLat, double currentLon, double otherLat, double otherLon)
-{
-
-// Math from http://www.movable-type.co.uk/scripts/latlong.html
-
-// Find delta in positions
-double deltaLat = (otherLat - currentLat) * TO_RADIANS;
-double deltaLon = (otherLon - currentLon) * TO_RADIANS;
-
-double latRad = currentLat * TO_RADIANS;
-
-
-//Using the math from the website, assume dlat = 0 and solve dlon
-double varDlon =  pow( cos(latRad), 2) * pow( sin(deltaLon/2), 2);
-double dy = 2 * atan2( sqrt(varDlon), sqrt(1-varDlon)) * RADIUS_EARTH * 1000.0;
-
-// Calculate Dlat assuming dlon = 0
-double varDlat = pow( sin(deltaLat/2), 2);
-double dy = 2 * atan2(sqrt(varDlat), sqrt(1-varDlat)) * RADIUS_EARTH * 1000.0;
-
-if (deltaLon < 0) { dx = -dx; }
-if (deltaLat < 0) { dy = -dy; }
-
-vector<double> distVec = { dx, dy };
-
-return distVec;
-
-}This may be more accurate than distanceVectors function TODO: Test both for accuracy*/
 
 predictedCollision
 Autopilot_Interface::
 CA_Predict(aircraftInfo & aircraftA, aircraftInfo & aircraftB) {
-	float fps = 10.0; //fps meaning future points
+
+	int fps = 10; //fps meaning future points
 	double  rH; // for relative Heading of the planes
-	float t;
-	double accDirA;
-	double accDirB;
-
-	double accNUnitA [2];
-	double accNUnitB [2];
-	double accNMagA;
-	double accNMagB;
-
-	double accTUnitA [2];
-	double accTUnitB [2];
-	double accTMagA;
-	double accTMagB;
-
-	double RmagA;
-	double RmagB;
-
-	double omegaA;
-	double omegaB;
-
-	double RvCA [2];
-	double RvCB [2];
-
+	int t;
+	float t2;
 	//-----------------------------------------------------------------------------
-	// Set up equations of predicted motion for both aircraft
+	//Predict t timesteps into the future
 	//-----------------------------------------------------------------------------
-	
 
-
-   aircraftA.Hdg[0] = atan2(aircraftA.velocityY[0], aircraftA.velocityX[0]) * 180.0/3.1415;
-   aircraftA.Hdg[1] = atan2(aircraftA.velocityY[1], aircraftA.velocityX[1]) * 180.0/3.1415;
-   aircraftB.Hdg[0] = atan2(aircraftB.velocityY[0], aircraftB.velocityX[0]) * 180.0/3.1415;
-   aircraftB.Hdg[1] = atan2(aircraftB.velocityY[1], aircraftB.velocityX[1]) * 180.0/3.1415;
-
-	if (aircraftA.Hdg[0] > aircraftA.Hdg[1]) 					{ accDirA = aircraftA.Hdg[0] + 90.0; }
-	if (aircraftA.Hdg[0] < aircraftA.Hdg[1]) 					{ accDirA = aircraftA.Hdg[0] - 90.0; }
-	if ( fabs(aircraftA.Hdg[0] - aircraftA.Hdg[1]) > 180)  { accDirA = accDirA + 180.0; }
-	if (aircraftB.Hdg[0] > aircraftB.Hdg[1]) 					{ accDirB = aircraftB.Hdg[0] + 90.0; }
-	if (aircraftB.Hdg[0] < aircraftB.Hdg[1]) 					{ accDirB = aircraftB.Hdg[0] - 90.0; }
-	if ( fabs(aircraftB.Hdg[0] - aircraftB.Hdg[1]) > 180)  { accDirB = accDirB + 180.0; }
-
-	
-	//printf("aircraftA velocityX: %f\n", aircraftA.velocityX[0]);
-	//printf("aircraftA velocityY: %f\n", aircraftA.velocityY[0]);
-	//printf("aircraftA heading 1: %f\n", aircraftA.Hdg[0]);
-	//printf("aircraftA heading 2: %f\n", aircraftA.Hdg[1]);
-	//printf("aircraftA accDirA: %f\n", accDirA);
-	//printf("aircraftA vTan: %f\n", aircraftA.vTan[0]);
-	
-
-	//Unit vector in direction of theoretical acceleration
-	accNUnitA[0] = cos(accDirA * TO_RADIANS); //X latitude
-	accNUnitA[1] = sin(accDirA * TO_RADIANS); //Y longitude
-	accNUnitB[0] = cos(accDirB * TO_RADIANS); //X latitude
-	accNUnitB[1] = sin(accDirB * TO_RADIANS); //Y longitude
-
-	//printf("update accNUnitA: %f\n", accNUnitA[0]);
-	//printf("update gpos.lat: %f\n", gpos.lat/1E7);
-
-	//printf("accNUnitA[0] %f\n", accNUnitA[0]);
-	//printf("accNUnitA[1] %f\n", accNUnitA[1]);
-	//printf("aircraftA.xAcc %f\n", aircraftA.xAcc);
-	//printf("aircraftA.yAcc %f\n", aircraftA.yAcc);
-	//Dot product of acceleration vector against theoretical normal acceleration vector
-	accNMagA = accNUnitA[0]*aircraftA.xAcc + accNUnitA[1]*aircraftA.yAcc;
-	accNMagB = accNUnitB[0]*aircraftB.xAcc + accNUnitB[1]*aircraftB.yAcc;
-
-
-	//printf("accNMagA: %f\n", accNMagA);
-	//printf("accNMagB: %f\n", accNMagB);
-	//Unit vector of acceleration tangent to the direction of motion
-	accTUnitA[0] = cos(aircraftA.Hdg[0] * TO_RADIANS);
-	accTUnitA[1] = sin(aircraftA.Hdg[0] * TO_RADIANS);
-	accTUnitB[0] = cos(aircraftB.Hdg[0] * TO_RADIANS);
-	accTUnitB[1] = sin(aircraftB.Hdg[0] * TO_RADIANS);
-
-	//Unit vector magnitude in direction of motion (achieved through dot product)
-	accTMagA = accTUnitA[0]*aircraftA.xAcc + accTUnitA[1]*aircraftA.yAcc;
-	accTMagB = accTUnitB[0]*aircraftB.xAcc + accTUnitB[1]*aircraftB.yAcc;
-	
-	//printf("accTUnitA[0] %f\n", accTUnitA[0]);
-	//printf("accTUnitA[1] %f\n", accTUnitA[1]);
-	//printf("accTMagA %f\n", accTMagA);
-	//Dot product of acceleration vector against theore
-	//printf("accNMagA %f\n",	accNMagA);
-
-	//Find radius of theoretical circle of turning
-	RmagA = pow(aircraftA.vTan[0], 2) / accNMagA;
-	RmagB = pow(aircraftB.vTan[0], 2) / accNMagB;
-
-	if (fabs(accNMagA) < 0.0001) {RmagA = 0.0;}
-	if (fabs(accNMagB) < 0.0001) {RmagB = 0.0;}
-	//printf("RmagA %f\n", RmagA);
-
-	// Use acceleration vector to find vector from vehicle to center
-	RvCA[0] = RmagA * accNUnitA[0];
-	RvCA[1] = RmagA * accNUnitA[1];
-	RvCB[0] = RmagB * accNUnitB[0];
-	RvCB[1] = RmagB * accNUnitB[1];
-
-
-	//	printf("RvCA[0] %f\n", RvCA[0]);
-	//	printf("RvCA[1] %f\n", RvCA[1]);
-
-	// Find magnitude of angular rotation (rad/s)
-	omegaA = aircraftA.vTan[0]/RmagA;
-	omegaB = aircraftB.vTan[0]/RmagB;
-	if (fabs(RmagA) < 0.0001) {omegaA = 0.0;}
-	if (fabs(RmagB) < 0.0001) {omegaB = 0.0;}
-
-
-	//printf("aircraftA omega: %f\n", omegaA);
-	//printf("aircraftB omega: %f\n", omegaB);
-	// find direction of rotation. R_center_to_vehicle cross Velocity_Vec
-	if (-1.0*(RvCA[1]*aircraftA.velocityX[0] - RvCA[0]*aircraftA.velocityY[0]) < 0.0) { omegaA = fabs(omegaA); }
-	else { omegaA = -fabs(omegaA); }
-
-		if (-1.0*(RvCB[1]*aircraftB.velocityX[0] - RvCB[0]*aircraftB.velocityY[0]) < 0.0) { omegaB = fabs(omegaB); }
-	else { omegaA = -fabs(omegaB); }
-
-	//printf("omegaA %f\n", omegaA);
-	//--------------------------------------------------------
-	// Predict along formulated path for fps seconds
-	//--------------------------------------------------------
-	float thetaA_i;
-	float thetaB_i;
-	float RvecA_i [2];
-	float RvecB_i [2];
-	float RpredictB [2];
-	float RpredictA [2];
-
-	for (t = 0.0; t < fps; t=t+1.0)
+	for (t = 0; t < fps; t++)
 	{
-		//printf("\nTimestep %f\n", t);
+
+	t2 = t + .01;
+		//----------------------------------------------------------------------------------------------------------
+		//
+		//	This predicts our future position, .001 timesteps in front of that position, 
+		//	    and the distance between those two points
+		//--------------------------------------------------------------------------------------------------------
+
+
+		aircraftA.futureDistx[0] = aircraftA.velocityX[0] * t + 0.5*(aircraftA.xAcc)* pow(t, 2);//futureDistx
+		aircraftA.futureDisty[0] = aircraftA.velocityY[0] * t + 0.5*(aircraftA.yAcc)* pow(t, 2);//futureDisty
+
+		aircraftA.futureDistx[1] = aircraftA.velocityX[1] * (t2) + 0.5*(aircraftA.xAcc)* pow((t2 + 0.001), 2);//futureDistx2
+		aircraftA.futureDisty[1] = aircraftA.velocityY[1] * (t2) + 0.5*(aircraftA.yAcc)* pow((t2 + 0.001), 2);//futureDisty2
+
+		aircraftA.futureDistx[2] = aircraftA.futureDistx[1] - aircraftA.futureDistx[0];//dx
+		aircraftA.futureDisty[2] = aircraftA.futureDisty[1] - aircraftA.futureDisty[0];//dy
+
+
 		//---------------------------------------------------------------------------------------------------------
-		//	Predict future positions
+		//	The Other Aircraft's prediction for future positions
 		//---------------------------------------------------------------------------------------------------------
-		thetaA_i = (accDirA+180.0) * TO_RADIANS + omegaA*t;
-		thetaB_i = (accDirB+180.0) * TO_RADIANS + omegaB*t;
-		//printf("thetaA_i %f\n", thetaA_i);
 
+
+		aircraftB.futureDistx[0] = aircraftB.velocityX[0] * t + 0.5*(aircraftB.xAcc)* pow(t, 2);//futuredistx
+		aircraftB.futureDisty[0] = aircraftB.velocityY[0] * t + 0.5*(aircraftB.yAcc)* pow(t, 2);//futuredisty
+
+		aircraftB.futureDistx[1] = aircraftB.velocityX[1] * (t2) + 0.5*(aircraftB.xAcc)* pow((t + 0.1), 2);//futuredistx2
+		aircraftB.futureDisty[1] = aircraftB.velocityY[1] * (t2) + 0.5*(aircraftB.yAcc)* pow((t + 0.1), 2);//futuredisty2
+
+		aircraftB.futureDistx[2] = aircraftB.futureDistx[1] - aircraftB.futureDistx[0];//dx to find tangent
+		aircraftB.futureDisty[2] = aircraftB.futureDisty[1] - aircraftB.futureDisty[0];//dy to find tangent
+
+		//printf("Future distance A (%f, %f, %f)\n", aircraftA.futureDistx[0], aircraftA.futureDistx[1], aircraftA.futureDistx[2]);
+
+		//------------------------------------------------------------------------------------------------------
+		//
+		//	This is the possible cases for our planes heading
+		//
+		//-----------------------------------------------------------------------------------------------------
+
+		/*/Accounts for the rare case that the aircraft is exactly North, South, East, or West
+		if (aircraftA.velocityX[0] == 0 && aircraftA.velocityX[1] == 0 && aircraftA.velocityY[0] > 0 && aircraftA.velocityY[1] > 0) {
+			aircraftA.Hdg = 0;
+		}
+
+		else if (aircraftA.velocityY[0] == 0 && aircraftA.velocityY[1] == 0 && aircraftA.velocityX[0] > 0 && aircraftA.velocityX[1] > 0) {
+			aircraftA.Hdg = 90;
+		}
+
+
+		else if (aircraftA.velocityX[0] == 0 && aircraftA.velocityX[1] && aircraftA.velocityY[0] < 0 && aircraftA.velocityY[1] < 0) {
+			aircraftA.Hdg = 180;
+		}
+
+		else if (aircraftA.velocityY[0] == 0 && aircraftA.velocityY[1] == 0 && aircraftA.velocityX[0] < 0 && aircraftA.velocityX[1] < 0) {
+			aircraftA.Hdg = 270;
+		}
+
+		//Calculates heading at any angle
+		else if (aircraftA.futureDistx[0] > 0 && aircraftA.futureDisty[0] > 0) {
+			aircraftA.Hdg = 90 - (atan(((abs(aircraftA.futureDisty[2])) / (abs(aircraftA.futureDistx[2]))))*(180 / PI));
+		}
+
+
+		else if (aircraftA.futureDistx[0] > 0 && aircraftA.futureDisty[0] < 0) {
+			aircraftA.Hdg = 180 - (atan(((abs(aircraftA.futureDisty[2])) / (abs(aircraftA.futureDistx[2]))))*(180 / PI));
+		}
+
+		else if (aircraftA.futureDistx[0] < 0 && aircraftA.futureDisty[0] < 0) {
+			aircraftA.Hdg = 360 - (atan(((abs(aircraftA.futureDisty[2])) / (abs(aircraftA.futureDistx[2]))))*(180 / PI));
+		}
+
+		else if (aircraftA.futureDistx[0] < 0 && aircraftA.futureDisty[0] > 0) {
+			aircraftA.Hdg = 270 - (atan(((abs(aircraftA.futureDisty[2])) / (abs(aircraftA.futureDistx[2]))))*(180 / PI));
+		}
+
+		printf("Plane 1 Heading %f: %f\n", t, aircraftA.Hdg);
+
+
+
+		//----------------------------------------------------------------------------------------
+		//
+		// Calculates the other planes possible headings
+		//
+		//----------------------------------------------------------------------------------------
 		
-		// Vector from center of rotation to new predicted position
-		RvecA_i[0] = RmagA*cos(thetaA_i);
-		RvecA_i[1] = RmagA*sin(thetaA_i);
-		RvecB_i[0] = RmagB*cos(thetaB_i);
-		RvecB_i[1] = RmagB*sin(thetaB_i);
+		//This may be redundant. This can be converted into a function
+		if (aircraftB.velocityX[0] == 0 && aircraftB.velocityX[1] == 0 && aircraftB.velocityY[0] > 0 && aircraftB.velocityY[1] > 0) {
+			aircraftB.Hdg = 0;
+		}
+
+		else if (aircraftB.velocityX[0] == 0 && aircraftB.velocityX[1] == 0 && aircraftB.velocityY[0] < 0 && aircraftB.velocityY[1] < 0) {
+			aircraftB.Hdg = 180;
+		}
+
+		else if (aircraftB.velocityY[0] == 0 && aircraftB.velocityY[1] == 0 && aircraftB.velocityX < 0 && aircraftB.velocityX < 0) {
+			aircraftB.Hdg = 270;
+		}
+
+		else if (aircraftB.velocityY[0] == 0 && aircraftB.velocityY[1] == 0 && aircraftB.velocityX[0] > 0 && aircraftB.velocityX[1] > 0) {
+			aircraftB.Hdg = 90;
+		}
 
 
-		//printf("RvecA_i[0] %f\n", RvecA_i[0]);
-		//printf("RvecA_i[1] %f\n", RvecA_i[1]);
+		//Calculates heading at any angle
+		if (aircraftB.futureDistx[0] > 0 && aircraftB.futureDisty[0] > 0) {
+			aircraftB.Hdg = 90 - (atan(((abs(aircraftB.futureDisty[2])) / (abs(aircraftB.futureDistx[2]))))*(180 / PI));
+		}
 
-		// Vector from vehicle to predicted position
-		RpredictA[0] = RvCA[0] + RvecA_i[0];
-		RpredictA[1] = RvCA[1] + RvecA_i[1];
-		RpredictB[0] = RvCB[0] + RvecB_i[0];
-		RpredictB[1] = RvCB[1] + RvecB_i[1];
-		
-		//printf("RpredictA[0] %f\n", RpredictA[0]);
-		//printf("RpredictA[1] %f\n", RpredictA[1]);
+		else if (aircraftB.futureDistx[0] > 0 && aircraftB.futureDisty[0] < 0) {
+			aircraftB.Hdg = 180 - (atan(((abs(aircraftB.futureDisty[2])) / (abs(aircraftB.futureDistx[2]))))*(180 / PI));
+		}
+
+		else if (aircraftB.futureDistx[0] < 0 && aircraftB.futureDisty[0] < 0) {
+			aircraftB.Hdg = 360 - (atan(((abs(aircraftB.futureDisty[2])) / (abs(aircraftB.futureDistx[2]))))*(180 / PI));
+		}
+
+		else if (aircraftB.futureDistx[0] < 0 && aircraftB.futureDisty[0] > 0) {
+			aircraftB.Hdg = 270 - (atan(((abs(aircraftB.futureDisty[2])) / (abs(aircraftB.futureDistx[2]))))*(180 / PI));
+		}
+
+		printf("Plane 2 Heading %f: %f\n", t, aircraftB.Hdg);
+
+
+
+		//--------------------------------------------------------------------------------------------------
+		//Relative heading
+		//--------------------------------------------------------------------------------------------------
+
+		rH = abs(aircraftB.Hdg - aircraftA.Hdg);
+		*/
+		//-----------------------------------------------------------------------------------------------
+		//
+		//	This is converting our current values into gps (not finished yet) [here we use the Lat/Lon array to store the planes position in gps]
+		//
+		//-----------------------------------------------------------------------------------------------
+
 
 		//Creates a future position item based on the current position and future distance
-		mavlink_mission_item_t ourFuturePos = NewAvoidWaypoint(RpredictA[0], RpredictA[1], aircraftA);
-		mavlink_mission_item_t otherFuturePos = NewAvoidWaypoint(RpredictB[0], RpredictB[1], aircraftB);
+		mavlink_mission_item_t ourFuturePos = NewAvoidWaypoint(aircraftA.futureDistx[0], aircraftA.futureDisty[0], aircraftA);
 		//printf("Predicted position: (%f, %f)\n", ourFuturePos.x, ourFuturePos.y);
 
-
-		//printf("ourFuturePos.x %f\n", ourFuturePos.x);
-		//printf("ourFuturePos.y %f\n", ourFuturePos.y);
-		//Log A
+		//Log
 		addToFile(convertToString(t), "Time interval");
 		addToFile(convertToString(ourFuturePos.x), "ourFuturePos.x");
 		addToFile(convertToString(ourFuturePos.y), "ourFuturePos.y");
-		//Log B
+
+		mavlink_mission_item_t otherFuturePos = NewAvoidWaypoint(aircraftB.futureDistx[0], aircraftB.futureDisty[0], aircraftB);
+		
+		//Log
 		addToFile(convertToString(otherFuturePos.x), "otherFuturePos.x");
 		addToFile(convertToString(otherFuturePos.y), "otherFuturePos.y");
+
+
 
 		//----------------------------------------------------------------------------------------------
 		//
@@ -2233,31 +2102,18 @@ CA_Predict(aircraftInfo & aircraftA, aircraftInfo & aircraftB) {
 			
 			//printf("Collision detected\n");
 			addToFile("COLLISION DETECTED", "");
-			//printf("Predicted distance between planes at collision: %f m\n", predictedDistance);
-			addToFile(convertToString(predictedDistance), "Distance at predicted collision");
+			printf("Predicted distance between planes at collision: %f m\n", predictedDistance);
+			//addToFile(convertToString(predictedDistance), "Distance at predicted collision");
 			return collisionPoint;
 		}
 	}
-	
-	//printf("Prediction function ended\n\n");
+
+	printf("\n\n");
 	return collisionPoint;
 }
 
 
 
-double
-relHdg(double currentHdg, double otherHdg)
-{
-
-	double tmpHdg = otherHdg - currentHdg;
-
-	double relativeHdg;
-	if (tmpHdg > 180) { relativeHdg = tmpHdg - 360;}
-	else if (tmpHdg < -180) { relativeHdg = tmpHdg + 360; }
-	else {relativeHdg = tmpHdg;}
-
-	return relativeHdg;
-}
 
 
 void 
@@ -2265,116 +2121,91 @@ Autopilot_Interface::
 CA_Avoid( aircraftInfo & aircraftA, aircraftInfo & aircraftB, predictedCollision &collision)
 {
 
-	double missDist = 75; //Meters
-	double turnRadius = 50; //Meters
-	double avoidVec[2] = {0};
-	//Stores waypoints in Current_Waypoints
+//Stores waypoints in Current_Waypoints
     Request_Waypoints();
-	 mavlink_mission_item_t headingVector; //FOR TESTING PURPOSES. MUST BE CHANGED LATER ALONG WITH "distanceVectors" FUNCTION
-	
-    //get info for aircraft
+
+    //get info for aircraft A
     double latA = aircraftA.lat[0];
     double lonA = aircraftA.lon[0];
     uint64_t buffA = aircraftA.safetyBubble;
+    //get info for aircraft B
     double latB = aircraftB.lat[0];
     double lonB = aircraftB.lon[0];
     uint64_t buffB = aircraftB.safetyBubble;
 
+    //This will allow the distance of the new waypoint to be smaller or larger depending on the timeToCollision
+    AVOID_BUFFER = avoidBufferSize + (buffB / collision.timeToCollision);
+    if (collision.timeToCollision < 1)
+        AVOID_BUFFER = avoidBufferSize;
+    //print and log statements
+    //printf("avoid buffer size: %i\n", avoidBufferSize);
+    addToFile(convertToString(AVOID_BUFFER), "avoidBufferSize");
 
-	 //Define more variables
-	 double distMag;
-	 double distHdg;
-	double addHdg;
-double avdDist;
-double avdHdg;
-//double targetHdg
-//double addHdg
+    // Length k = distance needed between avoidWaypoint and B
+    float k = aircraftB.safetyBubble + AVOID_BUFFER;
+    addToFile(convertToString(k), "k: distance between waypoint and B");
+    //angular distance
+    float Ad = k/RADIUS_EARTH;
+	//Log
+	addToFile(convertToString(Ad), "Ad: Angular distance");
 
-     double relativeHdg = relHdg(aircraftA.Hdg[0], aircraftB.Hdg[0]);
-	 addToFile(convertToString(relativeHdg), "Relative Heading");
 
-	 //Avoid if other aircraft is approaching from the side
-    if ( fabs(relativeHdg) > 30.0 && fabs(relativeHdg) < 150.0) {
+    //Bearing from A to B: from https://www.igismap.com/formula-to-find-bearing-or-heading-angle-between-two-points-latitude-longitude/
+    double dLat = latB - latA;
+    double dLon = lonB - lonA;
+    double x = TO_DEGREES * (cos(latB * TO_RADIANS) * sin(dLon * TO_RADIANS));
+    double y = TO_DEGREES * (cos(latA * TO_RADIANS) * sin(latB * TO_RADIANS) - sin(latA * TO_RADIANS) * cos(latB * TO_RADIANS) * cos(dLon * TO_RADIANS));
 
-		mavlink_mission_item_t distVec = distanceVectors(aircraftB.lat[0], aircraftB.lon[0], aircraftA.lat[0], aircraftA.lon[0]);
-    	distMag = sqrt( pow((distVec.x),2) + pow(distVec.y, 2));
-    	distHdg = atan2(distVec.y, distVec.x);
+	//Log
+	addToFile(convertToString(dLat), "dLat");
+	addToFile(convertToString(dLon), "dLon");
+	addToFile(convertToString(x), "x");
+	addToFile(convertToString(y), "y");
 
-    	//Find avoid point locaion
-      addHdg = atan(missDist/distMag);
-    	avdDist = sqrt(pow(missDist,2) + pow(distMag,2));
+    //Special cases in dealing with NED frame
+    double bearingAB = TO_DEGREES * atan2(x * TO_RADIANS,y * TO_RADIANS);   //Try changing (y,x) --> atan2(x,y) to switch to NED frame
 
-    	if (relativeHdg > 0.0) {addHdg = -addHdg;}
+	addToFile(convertToString(bearingAB), "bearingAB");
 
-    	avdHdg = distHdg + addHdg;
-    	avoidVec[0] = avdDist * cos(avdHdg);
-		avoidVec[1] = avdDist * sin(avdHdg);
 
-		printf("AvoidVec[0]: %f\n", avoidVec[0]);
-		//Log for this kind of avoidance
-		addToFile(convertToString(distMag), "distMag");
-		addToFile(convertToString(distHdg), "distHdg");
-		addToFile(convertToString(addHdg), "addHdg");
-		addToFile(convertToString(avdDist), "avdDist");
-		addToFile(convertToString(avdHdg), "avdHdg");
-		addToFile(convertToString(avoidVec[0]), "avoidVec[x]");
-		addToFile(convertToString(avoidVec[1]), "avoidVec[y]");
-	printf("avoidVex x,y: %f, %f\n", avoidVec[0], avoidVec[1]);
-    }
+	/* This helped in MATLAB but may be wrong here
+    if ((dLon < 0) && (dLat > 0) || (dLon > 0) && (dLat < 0)) {
+        bearingAB += 180;
+	}
+	*/
 
-	 //avoid if other aircraft is approaching from front or rear
-    else {
+    //Slope of line BC: right now it is simply a 75 degree turn
+    double bearingBC = bearingAB + 75;
+	//Log
+	addToFile(convertToString(bearingBC), "bearingBC");
 
-    	//Find heading to the goal waypoint
-		headingVector = distanceVectors(currentMission[currentWaypoint].x, currentMission[currentWaypoint].y, aircraftA.lat[0], aircraftA.lon[0]);
-		double targetHdg = atan2(headingVector.y, headingVector.x);
-		
-		double addHdg  = atan(missDist/turnRadius);
-		double avdDist = sqrt(pow(missDist,2) + pow(turnRadius,2));
-		double avdHdg = targetHdg + addHdg;
-		avoidVec[0] = avdDist * cos(avdHdg);
-		avoidVec[1] = avdDist * sin(avdHdg);
+    //displacement in meters of new waypoint in x direction (North/South)
+    double lat = TO_DEGREES*( asin( sin(latA*TO_RADIANS) * cos(Ad*TO_RADIANS) + cos(latA*TO_RADIANS)* sin(Ad*TO_RADIANS) * cos(bearingBC*TO_RADIANS)));
+	
+    //Longitude displacement
+    double lon_disp = TO_DEGREES * (  atan2( sin(bearingBC*TO_RADIANS)*sin(Ad*TO_RADIANS)*cos(latA*TO_RADIANS), cos(Ad*TO_RADIANS)-sin(latA*TO_RADIANS)*sin(latB*TO_RADIANS)));
+    double lon = lonA + lon_disp;
 
- 		//Log for this type of avoidance
-		addToFile(convertToString(addHdg), "head or tail avoid");
-		addToFile(convertToString(addHdg), "addHdg");
-		addToFile(convertToString(avdDist), "avdDist");
-		addToFile(convertToString(avdHdg), "avdHdg");
-		addToFile(convertToString(avoidVec[0]), "avoidVec[x]");
-		addToFile(convertToString(avoidVec[1]), "avoidVec[y]");
-	printf("head to tail avoidVex x,y: %f, %f\n", avoidVec[0], avoidVec[1]);
 
-   }
-
-	printf("avoidVex x,y: %f, %f\n", avoidVec[0], avoidVec[1]);
     //generate the waypoint
     mavlink_mission_item_t avoidWaypoint;
-    //avoidWaypoint.x = avoidVec[0];
-    //avoidWaypoint.y = avoidVec[1];
-    //avoidWaypoint.z = currentMission[endVal].z;
-
-		printf("avoidVex x,y: %f, %f\n", avoidVec[0], avoidVec[1]);
-	 avoidWaypoint = NewAvoidWaypoint(avoidVec[0], avoidVec[1], aircraftA);
-	printf("avoidWaypoint.x after: %f\n", avoidWaypoint.x);
-printf("avoidWaypoint.x %f , y: %f\n", avoidWaypoint.x, avoidWaypoint.y);
-	printf("avoidVex x,y: %f, %f\n", avoidVec[0], avoidVec[1]);
+    avoidWaypoint.x = lat;
+    avoidWaypoint.y = lon;
 
     //log its lat and lon
     addToFile(convertToString(avoidWaypoint.x), "avoidWP lat (x)");
     addToFile(convertToString(avoidWaypoint.y), "avoidWP lon (y)");
 
-	 //See if distance is correct
-	 addToFile(convertToString(gpsDistance(avoidWaypoint.x, avoidWaypoint.y, aircraftA.lat[0], aircraftA.lon[0])), "Distance to avoid point");
+	//See if distance is correct
+	addToFile(convertToString(gpsDistance(avoidWaypoint.x, avoidWaypoint.y, aircraftA.lat[0], aircraftA.lon[0])), "Distance to avoid point");
 
     //insert the waypoint
     insert_waypoint( avoidWaypoint, currentWaypoint);
 
 
     //Tell the aircraft to go to the waypoint
-    setCurrentWaypoint(currentWaypoint); //May not need this now that the write waypoints function is fixed
-
-
-	 addToFile(convertToString(currentWaypoint), "Replaced waypoint and current waypoint");
+    setCurrentWaypoint(currentWaypoint);
+	addToFile(convertToString(currentWaypoint), "Replaced waypoint and current waypoint");
     printf("Collision point created\n");
 
 }

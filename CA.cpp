@@ -64,7 +64,6 @@ int
 top (int argc, char **argv)
 {
 
-	sleep(180);
 	// --------------------------------------------------------------------------
 	//   PARSE THE COMMANDS
 	// --------------------------------------------------------------------------
@@ -140,7 +139,8 @@ top (int argc, char **argv)
  	autopilot_interface.messages_to_read.read_attitude = true;
 
 	autopilot_interface.start();
-	printf("START COLLISION AVOIDANCE");
+sleep(180);	
+printf("START COLLISION AVOIDANCE");
 	//---------------------------------------------------------------------------
 	//START COLLISION AVOIDANCE THREAD
 	//---------------------------------------------------------------------------

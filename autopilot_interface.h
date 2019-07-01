@@ -63,7 +63,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <vector>
-
+#include <string>
 #include "Mavlink/common/mavlink.h"
 
 // ------------------------------------------------------------------------------
@@ -113,9 +113,9 @@
 #define MAVLINK_MSG_SET_POSITION_TARGET_LOCAL_NED_YAW_RATE     0b0000010111111111
 
 
-
 #define PI 3.14159265359
-#define TO_RADIANS PI / 180;
+#define TO_RADIANS PI / 180.0
+#define TO_DEGREES 180 / PI
 #define RADIUS_EARTH	6378037.0
 
 
@@ -366,11 +366,12 @@ struct aircraftInfo {
 	double lat [3];
 	double lon [3];
 	double alt [3];
-
+   double gpsTime [3];
 	//Aircraft velocity and accelerations
 	//0: current velocity/acceleration, 1: last velocity (one second in the past)
-	float velocityX [2];
-	float velocityY [2];
+	double velocityX [2];
+	double velocityY [2];
+	double vTan [2];
 	double xAcc;
 	double yAcc;
 
@@ -381,8 +382,8 @@ struct aircraftInfo {
 	double futureDistx [3];
 	double futureDisty [3];
 
-	//Predicted heading
-	float Hdg;
+	//Stored heading
+	double Hdg [2];
 	
 /*	Creats a safety bubble around the aircraft that increases in radius with each
 	predicted future way point up to 10 way points	*/
@@ -449,7 +450,7 @@ public:
 	float AVOID_BUFFER;
 
 	// This plays a part in how large the AVOID_BUFFER will be
-	const int avoidBufferSize = 100;
+	const int avoidBufferSize = 7500; //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~` avoid buffer
 	
 
 	
@@ -468,27 +469,46 @@ public:
 
 	void write_set_servo(const int &servo, const int &pwm);
 
-	void write_waypoints(std::vector<mavlink_mission_item_t> waypoints);
+	void write_waypoints(std::vector<mavlink_mission_item_t> waypoints, uint16_t seq);
 
 	bool recieved_all_messages(const Time_Stamps &time_stamps);
 
 	int send_waypoint_count(mavlink_mission_count_t mavlink_mission_count);
 
-	mavlink_mission_item_t create_waypoint(const float &lat, const float &lon, const int &alt,const int &wp_number,
-                                               const int &radius);
+	
 
-	mavlink_mission_item_t createNewDisplacedWaypoint(const double & deltaX, const double & deltaY, const mavlink_mission_item_t & b);
+	//Return x and y distance (NED frame) from current position to second position
+	mavlink_mission_item_t distanceVectors(const double &target_lat, const double &target_long, const double &current_lat, const double &current_long);
 
 	double gpsDistance(const double &target_lat, const double &target_long, const double &current_lat, const double &current_long);
 
+
+	//---------------------------------------------------
+	// Waypoint functions
+	//---------------------------------------------------
 	void setCurrentWaypoint( uint16_t &waypointNum );//Tells the autopilot to go to a specific, pre-loaded waypoint
 
-	void Request_Waypoints();
-	void Receive_Waypoints();
+	bool Request_Waypoints();
+	bool Receive_Waypoints();
 	void insert_waypoint ( mavlink_mission_item_t &newWaypoint, uint16_t &desiredSeqNumber );
 
+	mavlink_mission_item_t create_waypoint(const float &lat, const float &lon, const int &alt,const int &wp_number, const int &radius);
+	mavlink_mission_item_t create_loiter_point(const float &lat, const float &lon, const int &alt, const int &wp_number, const int &radius);
+	mavlink_mission_item_t create_takeoff_point(const float &lat, const float &lon, const int &alt, const int &wp_number);
+	mavlink_mission_item_t create_land_point(const float &lat, const float &lon, const int &wp_number);
+	mavlink_mission_item_t createNewDisplacedWaypoint(const double & deltaX, const double & deltaY, const mavlink_mission_item_t & b);
 
+
+	//---------------------------------------------------
+	// Modes and arming
+	//---------------------------------------------------	
+	void arm_disarm(int arm);
+	void setMode(std::string mode);
+
+
+	//---------------------------------------------------
 	//Collision Avoidance functions
+	//---------------------------------------------------
 
 	void start_collision_avoidance(); //Runs first to start collision avoidance
 
@@ -502,6 +522,8 @@ public:
 
 	//Creates an avoid waypoint
 	mavlink_mission_item_t NewAvoidWaypoint(const double & deltaX, const double & deltaY, aircraftInfo & pos);
+
+	void updateAircraftInfo(aircraftInfo &aircraftObj, mavlink_global_position_int_t gpos, mavlink_adsb_vehicle_t adsb, int plane);
 
 private:
 
